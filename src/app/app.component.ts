@@ -8,8 +8,8 @@ import { Component } from '@angular/core';
       <section class="hero">
         <img
           class="hero__image"
-          src="assets/portfolio-hero.png"
-          alt="Abstract technical visual with data traces and structural grids"
+          src="assets/bridge.jpg"
+          alt="Bridge structure used as the portfolio hero image"
         />
         <div class="hero__overlay"></div>
 
@@ -66,7 +66,7 @@ import { Component } from '@angular/core';
       <section id="experience" class="section section--split">
         <div class="section__header">
           <p class="section__label">Experience</p>
-          <h2>Teaching, research, and production systems.</h2>
+          <h2>Teaching, research, and live survey systems.</h2>
         </div>
 
         <div class="timeline">
@@ -128,7 +128,7 @@ import { Component } from '@angular/core';
       <section id="contact" class="contact">
         <div>
           <p class="section__label">Contact</p>
-          <h2>Based in Lausanne, working between research and applied engineering.</h2>
+          <h2>Based in Lausanne, working on cutting-edge research.</h2>
         </div>
         <div class="contact__links">
           <a href="mailto:amro.abdrabo@unil.ch">amro.abdrabo&#64;unil.ch</a>
