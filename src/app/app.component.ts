@@ -100,23 +100,10 @@ import { Component } from '@angular/core';
         </div>
       </section>
 
-      <section class="section capabilities">
-        <div>
-          <p class="section__label">Skills</p>
-          <h2>Tooling for analytical and product work.</h2>
-        </div>
-
-        <div class="chip-group" aria-label="Technical skills">
-          @for (skill of skills; track skill) {
-            <span>{{ skill }}</span>
-          }
-        </div>
-      </section>
-
       <section class="section awards">
         <div>
           <p class="section__label">Awards</p>
-          <h2>Hackathon wins and academic distinction.</h2>
+          <h2>Awards.</h2>
         </div>
         <div class="award-list">
           @for (award of awards; track award) {
@@ -563,7 +550,7 @@ export class AppComponent {
   protected readonly metrics = [
     { value: '500+', label: 'students taught in Python and algorithms' },
     { value: '3', label: 'hackathon and project awards in 2024' },
-    { value: '4', label: 'professional working languages' }
+    { value: '4', label: 'professional working languages (EN - DE - AR - FR)' }
   ];
 
   protected readonly experience = [
