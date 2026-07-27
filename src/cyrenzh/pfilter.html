@@ -1,0 +1,564 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#111827" />
+  <title>WebXR Privacy Screen Demo</title>
+
+  <style>
+    html,
+    body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #111827;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    canvas {
+      display: block;
+    }
+
+    #hud {
+      position: fixed;
+      z-index: 10;
+      left: 16px;
+      top: 16px;
+      width: min(390px, calc(100vw - 32px));
+      padding: 14px 16px;
+      color: #f8fafc;
+      background: rgba(15, 23, 42, 0.82);
+      border: 1px solid rgba(255, 255, 255, .14);
+      border-radius: 14px;
+      box-shadow: 0 10px 35px rgba(0, 0, 0, .22);
+      backdrop-filter: blur(10px);
+      pointer-events: none;
+      user-select: none;
+    }
+
+    #hud h1 {
+      margin: 0 0 6px;
+      font-size: 16px;
+      line-height: 1.2;
+    }
+
+    #hud p {
+      margin: 4px 0;
+      font-size: 13px;
+      line-height: 1.35;
+      opacity: .9;
+    }
+
+    #readout {
+      margin-top: 9px;
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .pill {
+      padding: 4px 8px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, .10);
+      font-size: 12px;
+    }
+
+    kbd {
+      display: inline-block;
+      min-width: 1.4em;
+      padding: 1px 5px;
+      border-radius: 5px;
+      background: rgba(255, 255, 255, .13);
+      border: 1px solid rgba(255, 255, 255, .2);
+      font: inherit;
+      text-align: center;
+    }
+  </style>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.185.1/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+
+<body>
+  <div id="hud">
+    <h1>Privacy-filter phone — WebXR demo</h1>
+    <p><kbd>←</kbd>/<kbd>→</kbd> move sideways · <kbd>B</kbd> bigger · <kbd>S</kbd> smaller</p>
+    <p>VR: move your head sideways naturally. Controller thumbstick strafes; right trigger makes text bigger, left
+      trigger makes it smaller.</p>
+    <div id="readout">
+      <span class="pill" id="fontReadout">Font: 42 px</span>
+      <span class="pill" id="angleReadout">View angle: 0°</span>
+      <span class="pill" id="privacyReadout">Visible</span>
+    </div>
+  </div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { VRButton } from 'three/addons/webxr/VRButton.js';
+
+    // ---------- Scene ----------
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0xcbd5e1);
+    scene.fog = new THREE.Fog(0xcbd5e1, 4.5, 10);
+
+    // A "viewer rig" lets keyboard / XR controller strafing move the whole user.
+    const rig = new THREE.Group();
+    scene.add(rig);
+
+    const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.01, 50);
+    camera.position.set(0, 1.75, 2.15);
+    rig.add(camera);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.xr.enabled = true;
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    document.body.appendChild(renderer.domElement);
+    document.body.appendChild(VRButton.createButton(renderer));
+
+    // Lighting.
+    scene.add(new THREE.HemisphereLight(0xf8fafc, 0x334155, 1.45));
+
+    const keyLight = new THREE.DirectionalLight(0xffffff, 2.4);
+    keyLight.position.set(2.5, 4.5, 2.5);
+    keyLight.castShadow = true;
+    keyLight.shadow.mapSize.set(1024, 1024);
+    scene.add(keyLight);
+
+    // ---------- Low-poly room / "Blocks" aesthetic ----------
+    const floor = new THREE.Mesh(
+      new THREE.PlaneGeometry(10, 10),
+      new THREE.MeshStandardMaterial({ color: 0x9ca3af, roughness: 1 })
+    );
+    floor.rotation.x = -Math.PI / 2;
+    floor.receiveShadow = true;
+    scene.add(floor);
+
+    // Wooden desk with procedural plank texture.
+    function makeWoodTexture() {
+      const c = document.createElement('canvas');
+      c.width = 1024;
+      c.height = 512;
+      const ctx = c.getContext('2d');
+
+      ctx.fillStyle = '#8a5b36';
+      ctx.fillRect(0, 0, c.width, c.height);
+
+      const plankH = 86;
+      for (let y = 0; y < c.height; y += plankH) {
+        ctx.fillStyle = (Math.floor(y / plankH) % 2) ? '#94623a' : '#7d4f2d';
+        ctx.fillRect(0, y, c.width, plankH - 3);
+
+        ctx.strokeStyle = 'rgba(55, 28, 12, .35)';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(0, y + plankH - 2);
+        ctx.lineTo(c.width, y + plankH - 2);
+        ctx.stroke();
+
+        for (let x = 0; x < c.width; x += 55) {
+          const wiggle = Math.sin((x + y) * 0.045) * 5;
+          ctx.strokeStyle = 'rgba(45, 23, 11, .13)';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(x, y + 9 + wiggle);
+          ctx.bezierCurveTo(x + 20, y + 22, x + 32, y + 52, x + 58, y + 69 + wiggle);
+          ctx.stroke();
+        }
+      }
+
+      const tex = new THREE.CanvasTexture(c);
+      tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+      tex.repeat.set(2.5, 2);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      return tex;
+    }
+
+    const deskTop = new THREE.Mesh(
+      new THREE.BoxGeometry(2.8, 0.12, 1.6),
+      new THREE.MeshStandardMaterial({ map: makeWoodTexture(), roughness: 0.82, metalness: 0.02 })
+    );
+    deskTop.position.set(0, 0.72, 0);
+    deskTop.castShadow = deskTop.receiveShadow = true;
+    scene.add(deskTop);
+
+    const legMat = new THREE.MeshStandardMaterial({ color: 0x5f3b23, roughness: 0.9 });
+    [
+      [-1.2, 0.35, -0.62], [1.2, 0.35, -0.62],
+      [-1.2, 0.35, 0.62], [1.2, 0.35, 0.62]
+    ].forEach(([x, y, z]) => {
+      const leg = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.7, 0.13), legMat);
+      leg.position.set(x, y, z);
+      leg.castShadow = true;
+      scene.add(leg);
+    });
+
+    // A few blocky desk objects for scale / visual interest.
+    const mug = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.12, 0.12, 0.25, 10),
+      new THREE.MeshStandardMaterial({ color: 0x2563eb, roughness: 0.55 })
+    );
+    mug.position.set(-0.92, 0.91, -0.28);
+    mug.castShadow = true;
+    scene.add(mug);
+
+    const notebook = new THREE.Mesh(
+      new THREE.BoxGeometry(0.46, 0.035, 0.65),
+      new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.9 })
+    );
+    notebook.position.set(0.93, 0.805, 0.03);
+    notebook.rotation.y = -0.2;
+    notebook.castShadow = true;
+    scene.add(notebook);
+
+    // ---------- Phone ----------
+    const phone = new THREE.Group();
+    phone.position.set(0, 0.825, 0.03);
+    phone.rotation.y = 0.02;
+    scene.add(phone);
+
+    const body = new THREE.Mesh(
+      new THREE.BoxGeometry(0.52, 0.042, 0.92),
+      new THREE.MeshStandardMaterial({ color: 0x111827, metalness: 0.25, roughness: 0.32 })
+    );
+    body.castShadow = true;
+    body.receiveShadow = true;
+    phone.add(body);
+
+    // Dark base that remains visible when the "privacy film" hides the display.
+    const screenBase = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.46, 0.82),
+      new THREE.MeshStandardMaterial({
+        color: 0x020617,
+        roughness: 0.22,
+        metalness: 0.05
+      })
+    );
+    screenBase.rotation.x = -Math.PI / 2;
+    screenBase.position.y = 0.023;
+    phone.add(screenBase);
+
+    const displayCanvas = document.createElement('canvas');
+    displayCanvas.width = 768;
+    displayCanvas.height = 1360;
+    const displayCtx = displayCanvas.getContext('2d');
+    const displayTexture = new THREE.CanvasTexture(displayCanvas);
+    displayTexture.colorSpace = THREE.SRGBColorSpace;
+    displayTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+
+    const displayMaterial = new THREE.MeshBasicMaterial({
+      map: displayTexture,
+      transparent: true,
+      opacity: 1,
+      side: THREE.DoubleSide,
+      depthWrite: false
+    });
+
+    const display = new THREE.Mesh(new THREE.PlaneGeometry(0.45, 0.80), displayMaterial);
+    display.rotation.x = -Math.PI / 2;
+    display.position.y = 0.0245;
+    display.renderOrder = 3;
+    phone.add(display);
+
+    // Tiny speaker / camera details.
+    const detailMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.6 });
+    const speaker = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.006, 0.018), detailMat);
+    speaker.position.set(0, 0.026, -0.405);
+    phone.add(speaker);
+
+    const camDot = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.016, 0.006, 10), detailMat);
+    camDot.rotation.x = Math.PI / 2;
+    camDot.position.set(-0.09, 0.028, -0.405);
+    phone.add(camDot);
+
+    let fontSize = 42;
+    const minFont = 22;
+    const maxFont = 82;
+
+    function roundRect(ctx, x, y, w, h, r) {
+      const radius = Math.min(r, w / 2, h / 2);
+      ctx.beginPath();
+      ctx.moveTo(x + radius, y);
+      ctx.arcTo(x + w, y, x + w, y + h, radius);
+      ctx.arcTo(x + w, y + h, x, y + h, radius);
+      ctx.arcTo(x, y + h, x, y, radius);
+      ctx.arcTo(x, y, x + w, y, radius);
+      ctx.closePath();
+    }
+
+    function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
+      const words = text.split(/\s+/);
+      let line = '';
+      let yy = y;
+
+      for (let i = 0; i < words.length; i++) {
+        const test = line + words[i] + ' ';
+        if (ctx.measureText(test).width > maxWidth && line) {
+          ctx.fillText(line.trim(), x, yy);
+          line = words[i] + ' ';
+          yy += lineHeight;
+        } else {
+          line = test;
+        }
+      }
+      if (line) ctx.fillText(line.trim(), x, yy);
+      return yy;
+    }
+
+    function redrawPhone() {
+      const ctx = displayCtx;
+      const w = displayCanvas.width;
+      const h = displayCanvas.height;
+
+      // Screen.
+      ctx.fillStyle = '#f8fafc';
+      ctx.fillRect(0, 0, w, h);
+
+      // Status bar.
+      ctx.fillStyle = '#0f172a';
+      ctx.font = '600 29px system-ui, sans-serif';
+      ctx.fillText('09:41', 48, 62);
+      ctx.textAlign = 'right';
+      ctx.fillText('5G   93%', w - 48, 62);
+      ctx.textAlign = 'left';
+
+      // App header.
+      ctx.fillStyle = '#2563eb';
+      roundRect(ctx, 32, 96, w - 64, 118, 28);
+      ctx.fill();
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '700 42px system-ui, sans-serif';
+      ctx.fillText('Private Notes', 66, 168);
+
+      // Sample content.
+      ctx.fillStyle = '#0f172a';
+      ctx.font = `700 ${Math.round(fontSize * 1.05)}px system-ui, sans-serif`;
+      ctx.fillText('Sample text', 50, 300);
+
+      ctx.fillStyle = '#334155';
+      ctx.font = `500 ${fontSize}px system-ui, sans-serif`;
+
+      const sample =
+        'This text should be easy to read when you are directly in front of the phone. ' +
+        'Move sideways and the privacy filter hides the display from shoulder surfers.';
+      wrapText(ctx, sample, 50, 380, w - 100, Math.round(fontSize * 1.38));
+
+      // Demo card.
+      const cardY = 820;
+      ctx.fillStyle = '#e2e8f0';
+      roundRect(ctx, 42, cardY, w - 84, 250, 26);
+      ctx.fill();
+
+      ctx.fillStyle = '#475569';
+      ctx.font = '600 31px system-ui, sans-serif';
+      ctx.fillText('Privacy-screen experiment', 72, cardY + 62);
+
+      ctx.font = '500 28px system-ui, sans-serif';
+      wrapText(
+        ctx,
+        'Straight on = readable. Off-axis = dark. Try the arrow keys or move your headset.',
+        72, cardY + 118, w - 144, 40
+      );
+
+      // Bottom hint.
+      ctx.fillStyle = '#64748b';
+      ctx.font = '500 25px system-ui, sans-serif';
+      ctx.fillText('B bigger   •   S smaller', 50, h - 70);
+
+      displayTexture.needsUpdate = true;
+      document.getElementById('fontReadout').textContent = `Font: ${fontSize} px`;
+    }
+
+    function setFont(delta) {
+      const next = THREE.MathUtils.clamp(fontSize + delta, minFont, maxFont);
+      if (next !== fontSize) {
+        fontSize = next;
+        redrawPhone();
+      }
+    }
+
+    redrawPhone();
+
+    // ---------- Keyboard ----------
+    const keys = new Set();
+
+    addEventListener('keydown', (event) => {
+      const k = event.key.toLowerCase();
+      keys.add(k);
+
+      if (k === 'b' && !event.repeat) setFont(+4); // B = bigger
+      if (k === 's' && !event.repeat) setFont(-4); // S = smaller
+
+      if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+        event.preventDefault();
+      }
+    });
+
+    addEventListener('keyup', (event) => keys.delete(event.key.toLowerCase()));
+
+    // ---------- XR input ----------
+    // Right-hand select => bigger. Left-hand select => smaller.
+    // Squeeze on either controller => smaller, useful on single-controller setups.
+    const controllers = [];
+
+    for (let i = 0; i < 2; i++) {
+      const controller = renderer.xr.getController(i);
+      scene.add(controller);
+      controllers.push(controller);
+
+      controller.addEventListener('selectstart', (event) => {
+        const handedness = event.data?.handedness ?? 'none';
+        if (handedness === 'left') setFont(-4);
+        else setFont(+4);
+      });
+
+      controller.addEventListener('squeezestart', () => setFont(-4));
+    }
+
+    // ---------- Privacy filter ----------
+    const phoneNormal = new THREE.Vector3(0, 1, 0);
+    const worldNormal = new THREE.Vector3();
+    const viewerPos = new THREE.Vector3();
+    const screenPos = new THREE.Vector3();
+    const toViewer = new THREE.Vector3();
+    const phoneQuat = new THREE.Quaternion();
+
+    // Full visibility until ~14°, rapid fade, essentially black by ~35°.
+    function privacyVisibility(angleDeg) {
+      const start = 14;
+      const end = 35;
+      const t = THREE.MathUtils.clamp((angleDeg - start) / (end - start), 0, 1);
+      // Smoothstep then steepen it for a convincing privacy-film effect.
+      const smooth = t * t * (3 - 2 * t);
+      return Math.pow(1 - smooth, 2.2);
+    }
+
+    function getViewerWorldPosition() {
+      if (renderer.xr.isPresenting) {
+        // The XR camera reflects the current headset pose, including physical head movement.
+        renderer.xr.getCamera(camera).getWorldPosition(viewerPos);
+      } else {
+        camera.getWorldPosition(viewerPos);
+      }
+      return viewerPos;
+    }
+
+    function updatePrivacy() {
+      display.getWorldPosition(screenPos);
+      phone.getWorldQuaternion(phoneQuat);
+
+      getViewerWorldPosition();
+
+      // Convert the viewer position into the phone's local coordinate system.
+      // The phone lies flat, so a conventional angle-to-surface-normal test would
+      // incorrectly treat the viewer's normal elevated desktop viewpoint as
+      // strongly off-axis. For this demo we only care about LEFT/RIGHT shoulder
+      // surfing, so pitch (looking down at the desk) is intentionally ignored.
+      const localViewer = toViewer
+        .copy(viewerPos)
+        .sub(screenPos)
+        .applyQuaternion(phoneQuat.clone().invert());
+
+      // Horizontal off-axis angle:
+      //   x = sideways displacement across the phone
+      //   sqrt(y² + z²) = all non-sideways distance
+      // This gives 0° when the viewer is centred, even while looking down.
+      const forwardDistance = Math.max(
+        0.0001,
+        Math.hypot(localViewer.y, localViewer.z)
+      );
+      const angleDeg = THREE.MathUtils.radToDeg(
+        Math.atan2(Math.abs(localViewer.x), forwardDistance)
+      );
+
+      const visibility = privacyVisibility(angleDeg);
+      displayMaterial.opacity = visibility;
+
+      // Slightly increase the black base's sheen when the content disappears.
+      screenBase.material.roughness = THREE.MathUtils.lerp(0.22, 0.48, 1 - visibility);
+
+      const angleLabel = document.getElementById('angleReadout');
+      const privacyLabel = document.getElementById('privacyReadout');
+      angleLabel.textContent = `Side angle: ${angleDeg.toFixed(0)}°`;
+
+      if (visibility > 0.72) {
+        privacyLabel.textContent = 'Visible';
+      } else if (visibility > 0.12) {
+        privacyLabel.textContent = 'Filtering';
+      } else {
+        privacyLabel.textContent = 'Private';
+      }
+    }
+
+    // ---------- Motion ----------
+    const clock = new THREE.Clock();
+
+    function updateKeyboard(dt) {
+      // Desktop movement is deliberately lateral, like a shoulder-surfer test.
+      const speed = 0.75;
+      if (keys.has('arrowleft')) rig.position.x -= speed * dt;
+      if (keys.has('arrowright')) rig.position.x += speed * dt;
+      rig.position.x = THREE.MathUtils.clamp(rig.position.x, -1.45, 1.45);
+
+      if (!renderer.xr.isPresenting) {
+        camera.lookAt(0, 0.80, 0.02);
+      }
+    }
+
+    function updateXRControllers(dt) {
+      if (!renderer.xr.isPresenting) return;
+
+      const session = renderer.xr.getSession();
+      if (!session) return;
+
+      // XRInputSource.gamepad exposes controller axes. Different headsets/controllers
+      // place the primary x-axis at different positions, so choose the strongest x axis.
+      let strafe = 0;
+      for (const source of session.inputSources) {
+        const gp = source.gamepad;
+        if (!gp || !gp.axes?.length) continue;
+
+        const candidates = gp.axes.filter((_, index) => index % 2 === 0);
+        if (!candidates.length) continue;
+
+        const axisX = candidates.reduce((best, v) =>
+          Math.abs(v) > Math.abs(best) ? v : best, 0
+        );
+
+        if (Math.abs(axisX) > 0.16) strafe += axisX;
+      }
+
+      rig.position.x += strafe * 0.65 * dt;
+      rig.position.x = THREE.MathUtils.clamp(rig.position.x, -1.45, 1.45);
+    }
+
+    // ---------- Render ----------
+    renderer.setAnimationLoop(() => {
+      const dt = Math.min(clock.getDelta(), 0.05);
+      updateKeyboard(dt);
+      updateXRControllers(dt);
+      updatePrivacy();
+      renderer.render(scene, camera);
+    });
+
+    addEventListener('resize', () => {
+      camera.aspect = innerWidth / innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth, innerHeight);
+    });
+  </script>
+</body>
+
+</html>
